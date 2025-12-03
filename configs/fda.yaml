@@ -1,6 +1,6 @@
 source_dir: "data/synthetic/"
 target_dir: "data/real/"
 output_dir: "data/fda_output/"
+
 beta: 0.01
 image_size: 224
-

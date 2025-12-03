@@ -1,9 +1,78 @@
+# Python
 __pycache__/
 *.pyc
-*.pth
-*.log
-.DS_Store
-experiments/
-data/real/
-data/fda_output/
+*.pyo
+*.pyd
+*.so
 
+# Byte-compiled / optimized files
+.ipynb_checkpoints
+
+# Virtual environments
+env/
+venv/
+.venv/
+
+# Build / Packaging
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Logs / Outputs
+logs/
+*.log
+nohup.out
+*.tmp
+*.bak
+
+# Experiments & Results
+experiments/
+results/
+runs/
+checkpoints/
+weights/
+models/*.pth
+*.pt
+*.ckpt
+
+# Data (local only)
+data/real/
+data/synthetic/
+data/fda_output/
+data/*.zip
+data/*.tar
+data/*.h5
+data/*.npy
+data/*/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+
+# Jupyter
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# Environment / Secrets
+*.env
+.env/
+credentials.json
+token.json
+
+# Habitat / CV assets
+habitat_sim/
+*.ply
+*.glb
+*.obj
+
+# Cache
+.cache/
+.tmp/
+
+# infra
+.history/
