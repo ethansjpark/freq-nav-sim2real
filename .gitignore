@@ -76,3 +76,7 @@ habitat_sim/
 
 # infra
 .history/
+
+experiments/logs/
+experiments/**/checkpoints/
+data/

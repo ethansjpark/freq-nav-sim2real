@@ -79,4 +79,4 @@ Train PPO/DD-PPO navigation:
 
 ## Status
 
-Research in progress. Focused on fDA, ablations, and navigation modules
+Research in progress. Focused on FDA, ablations, and navigation modules

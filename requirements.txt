@@ -4,3 +4,4 @@ torch
 habitat-sim
 habitat-lab
 pyyaml
+tqdm
