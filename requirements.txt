@@ -7,3 +7,4 @@ pyyaml
 tqdm
 tensorboard
 matplotlib
+pytest
