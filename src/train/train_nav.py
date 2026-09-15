@@ -10,6 +10,11 @@ import numpy as np
 import torch
 import yaml
 
+try:
+    from torch.utils.tensorboard import SummaryWriter
+except ImportError:
+    SummaryWriter = None
+
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -83,6 +88,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mock-env", action="store_true", help="Force mock env.")
     parser.add_argument("--success-distance", type=float, default=0.2)
     parser.add_argument("--num-steps", type=int, default=-1, help="Override YAML num_steps.")
+    parser.add_argument("--tensorboard", action="store_true", help="Log to TensorBoard.")
+    parser.add_argument("--tb-dir", default="", help="TensorBoard log directory (default: output-dir/tb).")
+    parser.add_argument("--run-name", default="", help="Run name for TensorBoard and output sub-dir.")
     return parser.parse_args()
 
 
@@ -129,7 +137,17 @@ def main() -> None:
     buffer = RolloutBuffer()
 
     out_dir = Path(args.output_dir)
+    if args.run_name:
+        out_dir = out_dir / args.run_name
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    tb_writer = None
+    if args.tensorboard and SummaryWriter is not None:
+        tb_dir = args.tb_dir or str(out_dir / "tb")
+        tb_writer = SummaryWriter(log_dir=tb_dir)
+        print(f"[train_nav] TensorBoard logging to {tb_dir}")
+    elif args.tensorboard:
+        print("[train_nav] WARNING: tensorboard not installed, skipping TB logging.")
 
     global_step = 0
     obs_np = env.reset()
@@ -231,6 +249,15 @@ def main() -> None:
                 f"success20={avg_success:.3f} spl20={avg_spl:.3f}"
             )
 
+            if tb_writer is not None:
+                tb_writer.add_scalar("loss/total", metrics["loss"], global_step)
+                tb_writer.add_scalar("loss/policy", metrics["policy_loss"], global_step)
+                tb_writer.add_scalar("loss/value", metrics["value_loss"], global_step)
+                tb_writer.add_scalar("loss/entropy", metrics["entropy"], global_step)
+                tb_writer.add_scalar("rollout/return_20ep", avg_return, global_step)
+                tb_writer.add_scalar("rollout/success_20ep", avg_success, global_step)
+                tb_writer.add_scalar("rollout/spl_20ep", avg_spl, global_step)
+
         if global_step % ckpt_interval == 0 or global_step >= num_steps:
             ckpt_path = out_dir / f"ppo_step_{global_step}.pt"
             torch.save(
@@ -256,6 +283,9 @@ def main() -> None:
     summary_path = out_dir / "train_summary.json"
     summary_path.write_text(json.dumps(summary, indent=2))
     print(f"[train_nav] Wrote summary: {summary_path}")
+
+    if tb_writer is not None:
+        tb_writer.close()
 
 
 if __name__ == "__main__":

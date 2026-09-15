@@ -5,3 +5,5 @@ habitat-sim
 habitat-lab
 pyyaml
 tqdm
+tensorboard
+matplotlib
