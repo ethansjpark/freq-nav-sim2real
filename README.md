@@ -14,6 +14,7 @@ This project studies which visual frequencies PPO navigation agents rely on when
 - **Frequency ablation** experiments (HF-only, LF-only, mixed)
 - Navigation metrics (**SR**, **SPL**)
 - **C++ extensions** (pybind11) for GAE, FDA, frequency perturbation, and mock environment
+- **Research infrastructure**: ablation runner, multi-beta FDA sweep, TensorBoard logging, results plotting
 
 ---
 
@@ -37,7 +38,8 @@ src/
   habitat_env/        # Habitat + mock env wrappers, sensors
   models/             # Visual encoder + PPO policy
   train/              # PPO training, GAE, domain/FDA utilities
-  eval/               # Evaluation + ablations
+  eval/               # Evaluation, ablation plotting
+    plot_results.py   # Aggregate + plot ablation results (bar chart, radius sweep, CSV)
   utils/              # Metrics (SPL) + transforms
 
 csrc/                 # C++ extensions (pybind11 / PyTorch C++ API)
@@ -47,9 +49,15 @@ csrc/                 # C++ extensions (pybind11 / PyTorch C++ API)
   mock_env.cpp        # MockPointNavEnv (2D navigation simulator)
   build_ext.py        # Build script
 
+scripts/
+  run_fda.sh          # Single-beta FDA preprocessing
+  run_fda_multi.py    # Multi-beta FDA sweep for ablation studies
+  run_ablation.py     # Full ablation runner (train + eval across conditions)
+  run_nav.sh          # Navigation training launcher
+  eval_realworld.sh   # Evaluation launcher
+
 configs/              # YAML configs
-scripts/              # Launch scripts
-experiments/          # Results + logs
+experiments/          # Results, logs, TensorBoard runs
 ```
 
 ---
@@ -109,7 +117,17 @@ python src/train/train_domain.py --config configs/fda.yaml --epochs 1 --batch-si
 
 This writes summary metrics to `experiments/domain/domain_summary.json` and sample FDA images under `experiments/domain/samples/`.
 
-### 3. Navigation training (PPO)
+### 3. Multi-beta FDA sweep
+
+Generate FDA-adapted images across multiple beta values for ablation studies:
+
+```bash
+python scripts/run_fda_multi.py --betas 0.005 0.01 0.02 0.05 0.1 0.2
+```
+
+Outputs to `data/fda_ablation/beta_<value>/` with one directory per beta.
+
+### 4. Navigation training (PPO)
 
 Train a PPO navigation policy with frequency adaptation disabled (baseline):
 
@@ -123,7 +141,19 @@ For local smoke tests without Habitat scenes installed, you can force the mock P
 python src/train/train_nav.py --config configs/training.yaml --mock-env --num-steps 2000
 ```
 
-### 4. Evaluation
+Enable **TensorBoard** logging with `--tensorboard`:
+
+```bash
+python src/train/train_nav.py --config configs/training.yaml --mock-env --num-steps 5000 --tensorboard
+```
+
+View live training curves:
+
+```bash
+tensorboard --logdir experiments/checkpoints/tb
+```
+
+### 5. Evaluation
 
 Given a checkpoint produced by training (e.g. `experiments/checkpoints/ppo_step_2000.pt`):
 
@@ -137,6 +167,29 @@ Or using the helper script:
 bash scripts/eval_realworld.sh experiments/checkpoints/ppo_step_2000.pt
 ```
 
+### 6. Ablation experiments
+
+Run a full train+eval sweep across frequency conditions (baseline, varying radii, noise levels):
+
+```bash
+python scripts/run_ablation.py --mock-env --num-steps 5000 --tensorboard
+```
+
+This trains and evaluates 6 default conditions, writes per-condition checkpoints and eval results, and produces a combined `experiments/ablation/ablation_summary.json`. Use `--conditions baseline freq_r16` to run a subset, or `--skip-train` / `--skip-eval` to run only one phase.
+
+### 7. Plot results
+
+After running ablation experiments, generate comparison charts and a CSV export:
+
+```bash
+python src/eval/plot_results.py --ablation-dir experiments/ablation
+```
+
+Produces:
+- `ablation_bar.png` — SR and SPL bar chart across all conditions
+- `ablation_radius_sweep.png` — SR/SPL line plot vs. frequency cutoff radius
+- `ablation_results.csv` — tabular export of all metrics
+
 ---
 
 ## Stacks | Frameworks
@@ -146,6 +199,8 @@ bash scripts/eval_realworld.sh experiments/checkpoints/ppo_step_2000.pt
 - **C++ / pybind11** — performance-critical extensions (GAE, FDA, freq perturbation, mock env)
 - **NumPy** — data processing, FFT
 - **OpenCV** — image I/O and preprocessing
+- **TensorBoard** — training visualization (loss, return, SR, SPL curves)
+- **matplotlib** — ablation result plotting (bar charts, radius sweeps)
 
 ---
 

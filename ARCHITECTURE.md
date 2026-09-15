@@ -244,6 +244,11 @@ Common interface:
    - Saves model + optimizer state every `checkpoint_interval` steps
    - Writes training summary (mean return, success rate, SPL) to JSON
 
+4. **TensorBoard Logging** (optional, `--tensorboard`):
+   - Logs `loss/total`, `loss/policy`, `loss/value`, `loss/entropy`
+   - Logs `rollout/return_20ep`, `rollout/success_20ep`, `rollout/spl_20ep`
+   - Writes to `--tb-dir` (default: `<output-dir>/tb`)
+
 ### PPO Utilities (`src/train/ppo_utils.py`)
 
 - **RolloutBuffer**: Stores transitions, returns concatenated tensors
@@ -361,6 +366,56 @@ def public_function(...):
 
 ---
 
+## (6) Research Infrastructure
+
+### Ablation Runner
+
+**Location**: `scripts/run_ablation.py`
+
+Orchestrates end-to-end train+eval sweeps across frequency conditions. Each condition gets its own output directory with a generated config, checkpoints, eval results, and optional TensorBoard logs.
+
+**Default conditions** (6):
+- `baseline` — no frequency adaptation
+- `freq_r8`, `freq_r16`, `freq_r32` — `freq_adapt` with radius 8, 16, 32
+- `freq_r16_noise05`, `freq_r16_noise20` — radius 16 with noise std 0.5 and 2.0
+
+**Workflow**:
+1. For each condition, generate a per-condition `training.yaml` with `frequency_adapt` overrides
+2. Run `train_nav.py` (skippable with `--skip-train`)
+3. Find the latest checkpoint and run `eval_nav.py` (skippable with `--skip-eval`)
+4. Aggregate all eval results into `ablation_summary.json`
+
+Supports `--conditions` to run a subset, `--tensorboard` for per-condition TB logs, and `--mock-env` for local testing.
+
+### Multi-Beta FDA Sweep
+
+**Location**: `scripts/run_fda_multi.py`
+
+Generates FDA-adapted images across a sweep of beta values for offline preprocessing ablations. Default sweep: [0.005, 0.01, 0.02, 0.05, 0.1, 0.2]. Outputs to `data/fda_ablation/beta_<value>/`.
+
+### TensorBoard Integration
+
+**Location**: `src/train/train_nav.py` (conditional import of `SummaryWriter`)
+
+Enabled via `--tensorboard` flag on `train_nav.py` or `run_ablation.py`. Logs per-update scalars:
+- **Loss curves**: `loss/total`, `loss/policy`, `loss/value`, `loss/entropy`
+- **Rollout metrics**: `rollout/return_20ep`, `rollout/success_20ep`, `rollout/spl_20ep`
+
+Falls back gracefully when `tensorboard` is not installed (prints a warning, training continues).
+
+### Results Plotting
+
+**Location**: `src/eval/plot_results.py`
+
+Reads `ablation_summary.json` (or scans condition directories for individual `eval_results.json` files) and produces:
+- **Bar chart** (`ablation_bar.png`): SR and SPL side-by-side for all conditions
+- **Radius sweep** (`ablation_radius_sweep.png`): SR/SPL vs. frequency cutoff radius (for `freq_r*` conditions)
+- **CSV export** (`ablation_results.csv`): tabular metrics for external analysis
+
+Uses matplotlib with Agg backend (no display required). Falls back gracefully if matplotlib is not installed.
+
+---
+
 ## System Architecture Summary
 
 ### Component Status
@@ -379,19 +434,25 @@ def public_function(...):
 | Domain Analysis | ✅ Implemented | `src/train/train_domain.py` | — |
 | Evaluation Script | ✅ Implemented | `src/eval/eval_nav.py` | — |
 | Metrics (SPL) | ✅ Implemented | `src/utils/metrics.py` | — |
+| Ablation Runner | ✅ Implemented | `scripts/run_ablation.py` | — |
+| Multi-Beta FDA Sweep | ✅ Implemented | `scripts/run_fda_multi.py` | — |
+| TensorBoard Logging | ✅ Implemented | `src/train/train_nav.py` | — |
+| Results Plotting | ✅ Implemented | `src/eval/plot_results.py` | — |
 | DD-PPO Support | ❌ Not implemented | — | — |
 
 ### Data Flow Summary
 
 1. **Preprocessing**: Synthetic + Real images → FDA (`fourier_swap`) → Adapted images
-2. **Training**: Environment obs → `freq_adapt` (optional) → Encoder → Policy → Actions → GAE → PPO update
+2. **Training**: Environment obs → `freq_adapt` (optional) → Encoder → Policy → Actions → GAE → PPO update → TensorBoard logs
 3. **Evaluation**: Trained Policy → Environment → Greedy actions → Metrics (SR, SPL)
+4. **Analysis**: Ablation summary → `plot_results.py` → Charts (bar, radius sweep) + CSV
 
 ### Research Pipeline
 
 The system is designed to answer: "Which visual frequencies do navigation agents rely on?"
 
-1. Generate frequency-controlled image variants via FDA (different beta values)
-2. Train policies on each variant
-3. Evaluate performance to identify frequency dependencies
-4. Compare sim-to-real transfer performance across frequency conditions
+1. Generate frequency-controlled image variants via FDA (`run_fda_multi.py` for beta sweep)
+2. Train policies across frequency conditions (`run_ablation.py` orchestrates all conditions)
+3. Monitor training via TensorBoard (`--tensorboard` flag)
+4. Evaluate performance to identify frequency dependencies (automated by ablation runner)
+5. Visualize and compare results (`plot_results.py` for charts and CSV export)
