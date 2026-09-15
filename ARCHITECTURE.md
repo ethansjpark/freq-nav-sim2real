@@ -43,8 +43,15 @@ This system studies visual frequency requirements for sim-to-real navigation by:
          │
          ▼
 ┌─────────────────┐
-│ Habitat Env     │ (env_wrapper.py)
+│ Habitat Env     │ (env_wrapper.py / mock_env.py)
 │ RGB Observations│
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ freq_adapt      │ (frequency_adapt.py) [optional]
+│ LF preserve,   │
+│ HF noise        │
 └────────┬────────┘
          │
          ▼
@@ -72,33 +79,41 @@ This system studies visual frequency requirements for sim-to-real navigation by:
    - Reads real-world images from `data/real/`
    - Applies FDA transformation (frequency swapping)
    - Writes adapted images to `data/fda_output/`
+   - C++ acceleration: `fda_cpp` via `csrc/fda.cpp`
 
 2. **Data Loading** (`src/data/synthetic_loader.py`):
-   - `SyntheticDataset` class loads images from directory
-   - Returns images as numpy arrays (via OpenCV)
+   - `SyntheticDataset` loads images from a single directory
+   - `SyntheticRealPairDataset` yields paired source/target images for domain adaptation
+   - Returns images as numpy arrays or PyTorch tensors (via OpenCV)
 
-3. **Environment Interface** (`src/habitat_env/env_wrapper.py`):
-   - `HabitatWrapper` wraps Habitat-Lab environment
-   - Provides `reset()` → returns RGB observation
-   - Provides `step(action)` → returns (RGB, reward, done)
-   - RGB observations flow to the policy network
+3. **Environment Interface** (`src/habitat_env/env_wrapper.py`, `src/habitat_env/mock_env.py`):
+   - `HabitatWrapper` wraps Habitat-Lab for real 3D environments
+   - `MockPointNavEnv` provides a lightweight 2D PointNav simulator for smoke testing
+   - `make_mock_env()` factory dispatches to C++ (`mock_env_cpp`) when available
+   - Both expose `reset()` → RGB observation and `step(action)` → (RGB, reward, done, info)
 
-4. **Model Forward Pass**:
+4. **Online Frequency Perturbation** (`src/train/frequency_adapt.py`):
+   - `freq_adapt()` preserves low-frequency magnitude, replaces high-frequency with scaled noise
+   - Applied per-observation during training when `frequency_adapt.enabled: true` in config
+   - C++ acceleration: `freq_adapt_cpp` via `csrc/freq_adapt.cpp`
+
+5. **Model Forward Pass**:
    - RGB images → `VisualEncoder` → 512-dim feature vector
    - Feature vector → `Policy` → (actor_logits, critic_value)
    - Actor outputs 3 action logits (forward/left/right)
 
 ### Data Transformations
 - **Image Resizing** (`src/utils/transforms.py`): `resize()` function for image preprocessing
-- **FDA Frequency Manipulation**: Core transformation in `fourier_swap()` function
+- **FDA Frequency Manipulation**: `fourier_swap()` in `src/data/fda.py`
+- **Online Frequency Perturbation**: `freq_adapt()` in `src/train/frequency_adapt.py`
 
 ---
 
 ## (2) Visual Frequency Manipulation
 
-### Location: `src/data/fda.py`
+### Location: `src/data/fda.py` (Python) / `csrc/fda.cpp` (C++)
 
-The **Fourier Domain Adaptation (FDA)** algorithm is implemented in the `fourier_swap()` function. This is where all visual frequency manipulation occurs.
+The **Fourier Domain Adaptation (FDA)** algorithm is implemented in the `fourier_swap()` function. When the C++ extension `fda_cpp` is available, it dispatches to the native implementation; otherwise it falls back to NumPy.
 
 ### Frequency Manipulation Process
 
@@ -107,11 +122,8 @@ The **Fourier Domain Adaptation (FDA)** algorithm is implemented in the `fourier
    - Target image (real-world, from `data/real/`)
 
 2. **Frequency Domain Transformation**:
-   ```python
-   # Convert to frequency domain via 2D FFT
-   src_fft = np.fft.fftshift(np.fft.fft2(src, axes=(0, 1)))
-   tgt_fft = np.fft.fftshift(np.fft.fft2(tgt, axes=(0, 1)))
-   ```
+   - Python: `np.fft.fftshift(np.fft.fft2(src, axes=(0, 1)))`
+   - C++: `torch::fft::fftshift(torch::fft::fft2(src_f, ...))`
 
 3. **Low-Frequency Region Extraction**:
    - Calculates frequency cutoff radius: `b = int(min(h, w) * beta)`
@@ -125,11 +137,7 @@ The **Fourier Domain Adaptation (FDA)** algorithm is implemented in the `fourier
    - Preserves low-frequency components (style/appearance) from target
 
 5. **Inverse Transformation**:
-   ```python
-   mixed = np.fft.ifft2(np.fft.ifftshift(mixed_fft), axes=(0, 1))
-   mixed = np.real(mixed)  # Take real part
-   mixed = np.clip(mixed, 0, 255).astype(np.uint8)  # Clamp to valid range
-   ```
+   - Inverse FFT, take real part, clamp to [0, 255] uint8
 
 ### Frequency Manipulation Characteristics
 
@@ -156,27 +164,30 @@ The system uses FDA to create frequency-controlled variants for ablation studies
 
 ## (3) RL Policy Learning
 
-### Location: Intended in `src/train/train_nav.py` (currently placeholder)
+### Location: `src/train/train_nav.py`
 
 ### Policy Architecture
 
 The policy network is defined in `src/models/policy.py`:
 
 1. **Visual Encoder** (`src/models/encoder.py`):
-   - Input: RGB images (3 channels, 224x224)
-   - Architecture: Simple CNN with 2 convolutional layers
-     - Conv2d(3→16, stride=2) → ReLU
-     - Conv2d(16→32, stride=2) → ReLU
-     - Flatten → Linear(32×54×54 → 512)
+   - Input: RGB images (3 channels, any spatial size)
+   - Architecture: 3-layer CNN with adaptive pooling
+     - Conv2d(3→32, kernel=8, stride=4) → ReLU
+     - Conv2d(32→64, kernel=4, stride=2) → ReLU
+     - Conv2d(64→64, kernel=3, stride=1) → ReLU
+     - AdaptiveAvgPool2d(7, 7) → Flatten
+     - Linear(64×7×7 → 512) → ReLU → LayerNorm
    - Output: 512-dimensional feature vector
-   - Note: Code comments indicate this should be replaced with ResNet18 or ViT
+   - Orthogonal weight initialization
 
 2. **Policy Network** (`src/models/policy.py`):
    - Input: 512-dim feature vector from encoder
-   - Actor Head: `Linear(512 → 3)` - outputs action logits
+   - Actor Head: `Linear(512→512) → Tanh → Linear(512→3)` — outputs action logits
      - 3 discrete actions: forward, left, right
-   - Critic Head: `Linear(512 → 1)` - outputs value estimate
-   - Forward pass: `(actor_logits, critic_value) = policy(encoder(obs))`
+   - Critic Head: `Linear(512→512) → Tanh → Linear(512→1)` — outputs value estimate
+   - Helper methods: `act()` (sample), `evaluate_actions()` (log-prob + entropy + value)
+   - Orthogonal init with small gain (0.01) on actor output layer
 
 ### Training Configuration
 
@@ -186,51 +197,73 @@ From `configs/training.yaml`:
 - **Batch Size**: 64
 - **Learning Rate**: 3e-4
 - **Discount Factor (gamma)**: 0.99
+- **GAE Lambda**: 0.95
+- **Rollout Steps**: 256
+- **PPO Epochs**: 4
+- **Clip Coefficient**: 0.2
 - **DD-PPO**: Flag exists but not implemented (`use_ddppo: false`)
 
 ### Environment Interface
 
-`src/habitat_env/env_wrapper.py` provides the RL environment:
+Two environment backends:
+
+1. **HabitatWrapper** (`src/habitat_env/env_wrapper.py`):
+   - Wraps Habitat-Lab for real 3D scene navigation
+   - Requires Habitat scene datasets (Matterport3D, Gibson)
+
+2. **MockPointNavEnv** (`src/habitat_env/mock_env.py`):
+   - Lightweight 2D PointNav simulator for local testing
+   - Encodes relative goal bearing and distance into RGB frames
+   - Sparse success-only reward (1.0 on reaching goal, 0.0 otherwise)
+   - C++ acceleration: `mock_env_cpp` via `csrc/mock_env.cpp`
+
+Common interface:
 - **Task**: PointNav (PointGoal Navigation)
-- **Observations**: RGB images from Habitat-Sim
-- **Actions**: Discrete navigation actions (forward/left/right)
-- **Reward**: Navigation reward signal from Habitat
-- **Episode Length**: Max 500 steps (from `habitat_pointnav.yaml`)
+- **Observations**: RGB images (HWC, uint8)
+- **Actions**: Discrete — 0=forward, 1=turn left, 2=turn right
+- **Episode Length**: Max 500 steps
 - **Success Criteria**: Distance to goal < 0.2m
 
-### Training Loop (Intended Flow)
+### Training Loop
 
-The training script `src/train/train_nav.py` is currently a placeholder. The intended flow would be:
+`src/train/train_nav.py` implements the full PPO training loop:
 
 1. **Initialize**:
-   - Load Habitat environment with scene dataset
-   - Initialize Policy network (encoder + actor/critic)
-   - Load FDA-adapted images or apply FDA on-the-fly
+   - Create environment (Habitat or mock via `make_mock_env()`)
+   - Initialize Policy network (encoder + actor-critic)
+   - Set up Adam optimizer and rollout buffer
 
 2. **PPO Training Loop**:
-   - Collect rollouts: agent interacts with environment, stores (obs, action, reward, done)
-   - Compute advantages using GAE (Generalized Advantage Estimation)
-   - Update policy using PPO clipped objective
-   - Update value function (critic) using TD error
-   - Repeat for 500,000 steps
+   - Collect rollouts (256 steps): agent interacts with environment, stores (obs, action, logprob, reward, done, value)
+   - Optionally apply `freq_adapt()` to observations when `frequency_adapt.enabled: true`
+   - Compute advantages using GAE (`compute_gae()` — C++ accelerated via `gae_cpp`)
+   - Update policy using PPO clipped objective with minibatch updates
+   - Repeat for configured number of steps
 
-3. **Checkpointing** (not implemented):
-   - Save model checkpoints periodically
-   - Save training logs/metrics
+3. **Checkpointing**:
+   - Saves model + optimizer state every `checkpoint_interval` steps
+   - Writes training summary (mean return, success rate, SPL) to JSON
 
-### Current Status
+### PPO Utilities (`src/train/ppo_utils.py`)
 
-- **Policy Architecture**: ✅ Defined (encoder + policy)
-- **Environment Wrapper**: ✅ Implemented (HabitatWrapper)
-- **Training Loop**: ❌ Placeholder only
+- **RolloutBuffer**: Stores transitions, returns concatenated tensors
+- **compute_gae()**: Generalized Advantage Estimation with C++ dispatch (`gae_cpp`)
+- **ppo_update()**: Minibatch PPO update — clipped policy loss, MSE value loss, entropy bonus
+
+### Component Status
+
+- **Policy Architecture**: ✅ Implemented (encoder + actor-critic)
+- **Environment Wrapper**: ✅ Implemented (Habitat + mock)
+- **Training Loop**: ✅ Implemented (full PPO with GAE)
+- **Checkpointing**: ✅ Implemented
+- **Frequency Adaptation**: ✅ Implemented (online perturbation)
 - **DD-PPO Support**: ❌ Not implemented
-- **Checkpointing**: ❌ Not implemented
 
 ---
 
 ## (4) Evaluation
 
-### Location: Intended in `src/eval/eval_nav.py` (currently missing)
+### Location: `src/eval/eval_nav.py`
 
 ### Evaluation Metrics
 
@@ -251,18 +284,17 @@ The training script `src/train/train_nav.py` is currently a placeholder. The int
 
 ### Evaluation Script
 
-`scripts/eval_realworld.sh` references `src/eval/eval_nav.py`, but this file does not exist.
+`src/eval/eval_nav.py` loads a trained checkpoint and runs greedy evaluation:
 
-**Intended Evaluation Flow** (inferred from script):
-1. Load trained checkpoint
-2. Initialize policy network with checkpoint weights
-3. Run episodes in Habitat environment (or real-world if supported)
-4. Collect metrics: success rate, SPL, path lengths
-5. Report results
+1. Load checkpoint and restore policy weights
+2. Run N episodes (default 50) with deterministic action selection (argmax)
+3. Optionally apply `freq_adapt()` during evaluation
+4. Collect per-episode metrics: success, SPL, return, episode length
+5. Write summary JSON with aggregate results
 
 ### Evaluation Scenarios
 
-Based on README research goals, evaluation should test:
+Based on research goals, evaluation should test:
 - **Frequency Ablations**: 
   - HF-only images (high-frequency geometry preserved)
   - LF-only images (low-frequency style preserved)
@@ -272,12 +304,60 @@ Based on README research goals, evaluation should test:
   - Performance on FDA-adapted images
   - Performance on real-world images (if real-world evaluation is supported)
 
-### Current Status
+### Component Status
 
 - **Metrics Implementation**: ✅ SPL computation exists
-- **Evaluation Script**: ❌ Missing (`src/eval/eval_nav.py`)
-- **Evaluation Infrastructure**: ❌ Not implemented
-- **Real-World Evaluation**: ❌ Not implemented (script name suggests intent)
+- **Evaluation Script**: ✅ Implemented (greedy eval with checkpoint loading)
+- **Frequency Ablation Infrastructure**: ✅ Ready (via `freq_adapt` config toggle)
+- **Real-World Evaluation**: ❌ Not implemented
+
+---
+
+## (5) C++ Extensions
+
+### Location: `csrc/`
+
+All C++ extensions are built via pybind11 and PyTorch's `CppExtension` system. They are optional — every module falls back to the Python implementation when the extension is not importable.
+
+### Build
+
+```bash
+pip install pybind11
+cd csrc && python build_ext.py build_ext --inplace && cd ..
+export PYTHONPATH="csrc:$PYTHONPATH"
+```
+
+### Extensions
+
+| Module | Source | Python fallback | What it accelerates |
+|--------|--------|-----------------|---------------------|
+| `gae_cpp` | `csrc/gae.cpp` | `ppo_utils._compute_gae_py()` | GAE backward scan over rollout steps |
+| `fda_cpp` | `csrc/fda.cpp` | `fda._fourier_swap_py()` | FFT-based low-frequency swap (FDA) |
+| `freq_adapt_cpp` | `csrc/freq_adapt.cpp` | `frequency_adapt._freq_adapt_py()` | Online frequency perturbation during training |
+| `mock_env_cpp` | `csrc/mock_env.cpp` | `mock_env.MockPointNavEnv` | 2D PointNav mock environment (state machine + rendering) |
+
+### Dispatch Pattern
+
+Each Python module follows the same pattern:
+
+```python
+try:
+    import <ext>_cpp as _ext
+except ImportError:
+    _ext = None
+
+def public_function(...):
+    if _ext is not None:
+        return _ext.function(...)
+    return _fallback_py(...)
+```
+
+### Implementation Notes
+
+- **gae_cpp**: Uses `torch::Tensor` float accessors for zero-copy sequential scan. CPU-only dispatch (GPU tensors use Python fallback).
+- **fda_cpp**: Uses `torch::fft` C++ API (fft2, fftshift, ifft2) with float64 precision to match NumPy behavior. Accepts/returns HWC uint8 tensors.
+- **freq_adapt_cpp**: Uses `torch::fft` and `torch::polar` for complex reconstruction. Generates noise via `torch::randn_like`. CPU-only dispatch.
+- **mock_env_cpp**: Pure C++ state machine with `std::mt19937_64` RNG. Returns `pybind11::array_t<uint8_t>` numpy arrays directly. Linked against libtorch (requires `import torch` before loading).
 
 ---
 
@@ -285,22 +365,27 @@ Based on README research goals, evaluation should test:
 
 ### Component Status
 
-| Component | Status | Location |
-|-----------|--------|----------|
-| FDA Frequency Manipulation | ✅ Implemented | `src/data/fda.py` |
-| Data Loading | ✅ Implemented | `src/data/synthetic_loader.py` |
-| Visual Encoder | ✅ Implemented | `src/models/encoder.py` |
-| Policy Network | ✅ Implemented | `src/models/policy.py` |
-| Habitat Wrapper | ✅ Implemented | `src/habitat_env/env_wrapper.py` |
-| PPO Training Loop | ❌ Placeholder | `src/train/train_nav.py` |
-| Evaluation Script | ❌ Missing | `src/eval/eval_nav.py` |
-| Metrics (SPL) | ✅ Implemented | `src/utils/metrics.py` |
+| Component | Status | Location | C++ Extension |
+|-----------|--------|----------|---------------|
+| FDA Frequency Manipulation | ✅ Implemented | `src/data/fda.py` | `fda_cpp` |
+| Data Loading | ✅ Implemented | `src/data/synthetic_loader.py` | — |
+| Visual Encoder | ✅ Implemented | `src/models/encoder.py` | — |
+| Policy Network | ✅ Implemented | `src/models/policy.py` | — |
+| Habitat Wrapper | ✅ Implemented | `src/habitat_env/env_wrapper.py` | — |
+| Mock Environment | ✅ Implemented | `src/habitat_env/mock_env.py` | `mock_env_cpp` |
+| PPO Training Loop | ✅ Implemented | `src/train/train_nav.py` | — |
+| GAE Computation | ✅ Implemented | `src/train/ppo_utils.py` | `gae_cpp` |
+| Frequency Perturbation | ✅ Implemented | `src/train/frequency_adapt.py` | `freq_adapt_cpp` |
+| Domain Analysis | ✅ Implemented | `src/train/train_domain.py` | — |
+| Evaluation Script | ✅ Implemented | `src/eval/eval_nav.py` | — |
+| Metrics (SPL) | ✅ Implemented | `src/utils/metrics.py` | — |
+| DD-PPO Support | ❌ Not implemented | — | — |
 
 ### Data Flow Summary
 
-1. **Preprocessing**: Synthetic + Real images → FDA → Adapted images
-2. **Training**: Adapted images → Habitat Env → Encoder → Policy → Actions
-3. **Evaluation**: Trained Policy → Habitat Env → Metrics (SR, SPL)
+1. **Preprocessing**: Synthetic + Real images → FDA (`fourier_swap`) → Adapted images
+2. **Training**: Environment obs → `freq_adapt` (optional) → Encoder → Policy → Actions → GAE → PPO update
+3. **Evaluation**: Trained Policy → Environment → Greedy actions → Metrics (SR, SPL)
 
 ### Research Pipeline
 
