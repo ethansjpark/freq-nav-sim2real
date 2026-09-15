@@ -9,10 +9,11 @@ This project studies which visual frequencies PPO navigation agents rely on when
 ## Repository Includes
 
 - Frequency-domain sim-to-real adaptation (**FDA**)
-- Habitat **PointNav** environment wrapper
-- Visual encoder + **PPO/DD-PPO** policy
+- Habitat **PointNav** environment wrapper + mock environment for local testing
+- Visual encoder + **PPO** actor-critic policy
 - **Frequency ablation** experiments (HF-only, LF-only, mixed)
 - Navigation metrics (**SR**, **SPL**)
+- **C++ extensions** (pybind11) for GAE computation and FDA frequency swapping
 
 ---
 
@@ -35,9 +36,14 @@ src/
   data/               # FDA + synthetic/real loaders
   habitat_env/        # Habitat + mock env wrappers, sensors
   models/             # Visual encoder + PPO policy
-  train/              # PPO training, domain/FDA utilities
+  train/              # PPO training, GAE, domain/FDA utilities
   eval/               # Evaluation + ablations
   utils/              # Metrics (SPL) + transforms
+
+csrc/                 # C++ extensions (pybind11 / PyTorch C++ API)
+  gae.cpp             # Generalized Advantage Estimation
+  fda.cpp             # Fourier Domain Adaptation (frequency swap)
+  build_ext.py        # Build script
 
 configs/              # YAML configs
 scripts/              # Launch scripts
@@ -50,9 +56,24 @@ experiments/          # Results + logs
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # or `.\.venv\Scripts\activate` on Windows (CPU-only)
+source .venv/bin/activate
 pip install -r requirements.txt
 bash setup.sh
+```
+
+### Building C++ Extensions (optional)
+
+The C++ extensions accelerate GAE and FDA. Python fallbacks are used automatically when they are not built.
+
+```bash
+pip install pybind11
+cd csrc && python build_ext.py build_ext --inplace && cd ..
+```
+
+To use them, add `csrc/` to your Python path:
+
+```bash
+export PYTHONPATH="csrc:$PYTHONPATH"
 ```
 
 ---
@@ -111,14 +132,14 @@ bash scripts/eval_realworld.sh experiments/checkpoints/ppo_step_2000.pt
 
 ## Stacks | Frameworks
 
-- PyTorch
-- Habitat-Sim
-- NumPy
-- Matplotlib
-- OpenCV
+- **PyTorch** — models, training, C++ extension API
+- **Habitat-Sim** — 3D navigation environments
+- **C++ / pybind11** — performance-critical extensions (GAE, FDA)
+- **NumPy** — data processing, FFT
+- **OpenCV** — image I/O and preprocessing
 
 ---
 
 ## Status
 
-Research in progress. Focused on FDA, ablations, and navigation modules
+Research in progress. Focused on FDA, ablations, and navigation modules.

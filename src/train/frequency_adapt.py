@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import torch
 
+try:
+    import freq_adapt_cpp as _freq_adapt_cpp
+except ImportError:
+    _freq_adapt_cpp = None
+
 
 def _radial_lowpass_mask(height: int, width: int, radius: int, device: torch.device) -> torch.Tensor:
     yy, xx = torch.meshgrid(
@@ -14,16 +19,8 @@ def _radial_lowpass_mask(height: int, width: int, radius: int, device: torch.dev
     return (dist <= float(radius)).float()
 
 
-def freq_adapt(obs: torch.Tensor, radius: int = 16, noise_std: float = 1.0) -> torch.Tensor:
-    """
-    Applies frequency-domain perturbation by preserving low-frequency magnitude
-    and replacing high-frequency magnitude with noise.
-
-    Args:
-        obs: Tensor with shape (B, C, H, W), float in [0, 1].
-        radius: Low-frequency radial cutoff.
-        noise_std: Multiplicative standard deviation for HF noise.
-    """
+def _freq_adapt_py(obs: torch.Tensor, radius: int = 16, noise_std: float = 1.0) -> torch.Tensor:
+    """Pure-PyTorch frequency-domain perturbation."""
     if radius <= 0:
         return obs
     if obs.ndim != 4:
@@ -39,7 +36,6 @@ def freq_adapt(obs: torch.Tensor, radius: int = 16, noise_std: float = 1.0) -> t
     mask = _radial_lowpass_mask(h, w, radius=radius, device=obs.device)
     mask = mask.view(1, 1, h, w).expand(b, c, h, w)
 
-    # Scale noise by per-sample magnitude statistics for numerical stability.
     scale = mag.mean(dim=(-2, -1), keepdim=True).clamp_min(1e-6)
     noise = torch.randn_like(mag) * scale * float(noise_std)
     mixed_mag = mag * mask + noise * (1.0 - mask)
@@ -48,3 +44,13 @@ def freq_adapt(obs: torch.Tensor, radius: int = 16, noise_std: float = 1.0) -> t
     mixed_freq = torch.fft.ifftshift(mixed_freq, dim=(-2, -1))
     rec = torch.fft.ifft2(mixed_freq, dim=(-2, -1)).real
     return rec.clamp(0.0, 1.0)
+
+
+def freq_adapt(obs: torch.Tensor, radius: int = 16, noise_std: float = 1.0) -> torch.Tensor:
+    """
+    Applies frequency-domain perturbation by preserving low-frequency magnitude
+    and replacing high-frequency magnitude with noise.
+    """
+    if _freq_adapt_cpp is not None and obs.device.type == "cpu":
+        return _freq_adapt_cpp.freq_adapt(obs, radius, noise_std)
+    return _freq_adapt_py(obs, radius, noise_std)

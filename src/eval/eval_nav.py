@@ -15,7 +15,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.habitat_env.env_wrapper import HabitatWrapper
-from src.habitat_env.mock_env import MockPointNavConfig, MockPointNavEnv
+from src.habitat_env.mock_env import MockPointNavConfig, MockPointNavEnv, make_mock_env
 from src.models.encoder import VisualEncoder
 from src.models.policy import Policy
 from src.train.frequency_adapt import freq_adapt
@@ -45,7 +45,7 @@ def _make_env(args: argparse.Namespace, image_size: int, max_episode_steps: int)
             success_distance=args.success_distance,
             seed=args.seed,
         )
-        return MockPointNavEnv(cfg), "mock"
+        return make_mock_env(cfg), "mock"
 
     try:
         return HabitatWrapper(args.habitat_config), "habitat"
@@ -57,7 +57,7 @@ def _make_env(args: argparse.Namespace, image_size: int, max_episode_steps: int)
             success_distance=args.success_distance,
             seed=args.seed,
         )
-        return MockPointNavEnv(cfg), "mock"
+        return make_mock_env(cfg), "mock"
 
 
 def parse_args() -> argparse.Namespace:

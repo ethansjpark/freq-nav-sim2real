@@ -5,6 +5,11 @@ from typing import Dict, Tuple
 
 import numpy as np
 
+try:
+    import mock_env_cpp as _mock_env_cpp
+except ImportError:
+    _mock_env_cpp = None
+
 
 @dataclass
 class MockPointNavConfig:
@@ -15,6 +20,21 @@ class MockPointNavConfig:
     turn_angle_deg: float = 15.0
     world_extent: float = 5.0
     seed: int = 0
+
+
+def make_mock_env(cfg: MockPointNavConfig):
+    """Return C++ env when available, otherwise Python."""
+    if _mock_env_cpp is not None:
+        return _mock_env_cpp.MockPointNavEnv(
+            image_size=cfg.image_size,
+            max_episode_steps=cfg.max_episode_steps,
+            success_distance=cfg.success_distance,
+            step_size=cfg.step_size,
+            turn_angle_deg=cfg.turn_angle_deg,
+            world_extent=cfg.world_extent,
+            seed=cfg.seed,
+        )
+    return MockPointNavEnv(cfg)
 
 
 class MockPointNavEnv:
