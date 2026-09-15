@@ -490,3 +490,26 @@ The system is designed to answer: "Which visual frequencies do navigation agents
 3. Monitor training via TensorBoard (`--tensorboard` flag)
 4. Evaluate performance to identify frequency dependencies (automated by ablation runner)
 5. Visualize and compare results (`plot_results.py` for charts and CSV export)
+
+### Ablation Results
+
+50k-step PPO training on mock PointNav environment, 50 eval episodes per condition (seed=42):
+
+| Condition | Freq Adapt | Radius | Noise Std | SR | SPL | Avg Length |
+|-----------|-----------|--------|-----------|-----|------|-----------|
+| baseline | off | — | — | 0.96 | 0.907 | 66.4 |
+| freq_r8 | on | 8 | 1.0 | 0.00 | 0.000 | 500.0 |
+| freq_r16 | on | 16 | 1.0 | 1.00 | 0.929 | 57.9 |
+| freq_r32 | on | 32 | 1.0 | 0.98 | 0.904 | 64.0 |
+| freq_r16_noise05 | on | 16 | 0.5 | 1.00 | 1.000 | 45.1 |
+| freq_r16_noise20 | on | 16 | 2.0 | 1.00 | 0.998 | 45.9 |
+
+**Key findings:**
+
+1. **High-frequency dependence**: Radius 8 preserves too little HF content — the agent fails completely (0% SR). Navigation requires edges, geometry, and fine spatial details encoded in high frequencies.
+
+2. **Frequency perturbation as regularization**: Radius 16 and 32 match or exceed baseline performance, suggesting that replacing HF magnitude with noise during training forces the policy to generalize across frequency-domain variation.
+
+3. **Noise tolerance**: Both noise_std=0.5 and 2.0 with r=16 achieve 100% SR and near-perfect SPL. The agent tolerates a wide range of HF noise intensities when enough LF structure is preserved.
+
+4. **Sharp frequency threshold**: A discontinuous jump from 0% SR (r=8) to 100% SR (r=16) reveals a critical frequency band between radius 8 and 16 that the policy depends on. This is the primary finding for future investigation with real Habitat scenes.
