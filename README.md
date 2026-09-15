@@ -13,7 +13,7 @@ This project studies which visual frequencies PPO navigation agents rely on when
 - Visual encoder + **PPO** actor-critic policy
 - **Frequency ablation** experiments (HF-only, LF-only, mixed)
 - Navigation metrics (**SR**, **SPL**)
-- **C++ extensions** (pybind11) for GAE computation and FDA frequency swapping
+- **C++ extensions** (pybind11) for GAE, FDA, frequency perturbation, and mock environment
 
 ---
 
@@ -43,6 +43,8 @@ src/
 csrc/                 # C++ extensions (pybind11 / PyTorch C++ API)
   gae.cpp             # Generalized Advantage Estimation
   fda.cpp             # Fourier Domain Adaptation (frequency swap)
+  freq_adapt.cpp      # Frequency-domain perturbation (LF preserve, HF noise)
+  mock_env.cpp        # MockPointNavEnv (2D navigation simulator)
   build_ext.py        # Build script
 
 configs/              # YAML configs
@@ -63,7 +65,14 @@ bash setup.sh
 
 ### Building C++ Extensions (optional)
 
-The C++ extensions accelerate GAE and FDA. Python fallbacks are used automatically when they are not built.
+The C++ extensions accelerate GAE, FDA, frequency perturbation, and mock environment stepping. Python fallbacks are used automatically when they are not built.
+
+| Extension | Source | Accelerates |
+|---|---|---|
+| `gae_cpp` | `gae.cpp` | GAE advantage computation (`ppo_utils.py`) |
+| `fda_cpp` | `fda.cpp` | Fourier domain frequency swap (`fda.py`) |
+| `freq_adapt_cpp` | `freq_adapt.cpp` | Online frequency perturbation (`frequency_adapt.py`) |
+| `mock_env_cpp` | `mock_env.cpp` | Mock PointNav environment (`mock_env.py`) |
 
 ```bash
 pip install pybind11
@@ -134,7 +143,7 @@ bash scripts/eval_realworld.sh experiments/checkpoints/ppo_step_2000.pt
 
 - **PyTorch** — models, training, C++ extension API
 - **Habitat-Sim** — 3D navigation environments
-- **C++ / pybind11** — performance-critical extensions (GAE, FDA)
+- **C++ / pybind11** — performance-critical extensions (GAE, FDA, freq perturbation, mock env)
 - **NumPy** — data processing, FFT
 - **OpenCV** — image I/O and preprocessing
 
