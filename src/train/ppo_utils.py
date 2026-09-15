@@ -6,6 +6,11 @@ from typing import Dict, List
 import torch
 import torch.nn.functional as F
 
+try:
+    import gae_cpp as _gae_cpp
+except ImportError:
+    _gae_cpp = None
+
 
 @dataclass
 class Transition:
@@ -64,7 +69,7 @@ class RolloutBuffer:
         self.data.clear()
 
 
-def compute_gae(
+def _compute_gae_py(
     rewards: torch.Tensor,
     dones: torch.Tensor,
     values: torch.Tensor,
@@ -86,6 +91,27 @@ def compute_gae(
 
     returns = advantages + values
     return {"advantages": advantages, "returns": returns}
+
+
+def compute_gae(
+    rewards: torch.Tensor,
+    dones: torch.Tensor,
+    values: torch.Tensor,
+    next_value: torch.Tensor,
+    gamma: float,
+    gae_lambda: float,
+) -> Dict[str, torch.Tensor]:
+    if _gae_cpp is not None and rewards.device.type == "cpu":
+        adv, ret = _gae_cpp.compute_gae(
+            rewards.float().contiguous(),
+            dones.float().contiguous(),
+            values.float().contiguous(),
+            next_value.float().contiguous(),
+            gamma,
+            gae_lambda,
+        )
+        return {"advantages": adv, "returns": ret}
+    return _compute_gae_py(rewards, dones, values, next_value, gamma, gae_lambda)
 
 
 def ppo_update(

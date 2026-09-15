@@ -65,6 +65,7 @@ credentials.json
 token.json
 
 # Habitat / CV assets
+habitat-lab/
 habitat_sim/
 *.ply
 *.glb
