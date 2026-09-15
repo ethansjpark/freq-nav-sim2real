@@ -416,6 +416,39 @@ Uses matplotlib with Agg backend (no display required). Falls back gracefully if
 
 ---
 
+## (7) Testing
+
+### Location: `tests/`
+
+The project uses **pytest** with 58 tests covering all major modules. Tests run in ~1 second without any external dependencies (no Habitat scenes, no C++ extensions required).
+
+### Test Modules
+
+| File | What it tests | Key assertions |
+|------|---------------|----------------|
+| `test_fda.py` | `fourier_swap` (Python + dispatch) | Output shape/dtype/range, beta=0 identity, determinism |
+| `test_frequency_adapt.py` | `freq_adapt` + radial lowpass mask | BCHW shape, [0,1] clamping, radius=0 passthrough, input validation |
+| `test_ppo_utils.py` | `RolloutBuffer`, `compute_gae`, `ppo_update` | Buffer ops, returns = advantages + values, gamma=0 / all-done edge cases, PPO metric keys |
+| `test_mock_env.py` | `MockPointNavEnv` + `make_mock_env` factory | Reset/step interface, action validation, episode termination, reward logic, seed determinism |
+| `test_models.py` | `VisualEncoder` + `Policy` | Output shapes across image sizes, gradient flow, act/evaluate_actions correctness |
+| `test_metrics.py` | `compute_spl` | Failure=0, optimal=1, longer path scaling, zero-division edge case |
+| `test_plot_results.py` | `load_summary`, `load_individual_results`, `write_csv` | JSON parsing, directory scanning, CSV output |
+
+### Shared Fixtures (`conftest.py`)
+
+- `rng` — seeded `numpy.random.Generator`
+- `sample_image` — random 64x64 RGB uint8 array
+- `sample_image_pair` — (src, tgt) pair for FDA tests
+- `sample_obs_tensor` — random BCHW float tensor for freq_adapt tests
+
+### Running
+
+```bash
+python -m pytest tests/ -v
+```
+
+---
+
 ## System Architecture Summary
 
 ### Component Status
@@ -438,6 +471,7 @@ Uses matplotlib with Agg backend (no display required). Falls back gracefully if
 | Multi-Beta FDA Sweep | ✅ Implemented | `scripts/run_fda_multi.py` | — |
 | TensorBoard Logging | ✅ Implemented | `src/train/train_nav.py` | — |
 | Results Plotting | ✅ Implemented | `src/eval/plot_results.py` | — |
+| Test Suite | ✅ 58 tests | `tests/` | — |
 | DD-PPO Support | ❌ Not implemented | — | — |
 
 ### Data Flow Summary

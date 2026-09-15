@@ -56,6 +56,7 @@ scripts/
   run_nav.sh          # Navigation training launcher
   eval_realworld.sh   # Evaluation launcher
 
+tests/                # pytest test suite (58 tests)
 configs/              # YAML configs
 experiments/          # Results, logs, TensorBoard runs
 ```
@@ -192,6 +193,28 @@ Produces:
 
 ---
 
+## Testing
+
+Run the full test suite:
+
+```bash
+python -m pytest tests/ -v
+```
+
+58 tests cover all major modules:
+
+| Test file | Module | Tests |
+|-----------|--------|-------|
+| `test_fda.py` | FDA (`fourier_swap`) | 7 |
+| `test_frequency_adapt.py` | Frequency perturbation | 7 |
+| `test_ppo_utils.py` | GAE, RolloutBuffer, PPO update | 9 |
+| `test_mock_env.py` | MockPointNavEnv | 10 |
+| `test_models.py` | Visual encoder + Policy | 10 |
+| `test_metrics.py` | SPL metric | 6 |
+| `test_plot_results.py` | Ablation result plotting | 5 |
+
+---
+
 ## Stacks | Frameworks
 
 - **PyTorch** — models, training, C++ extension API
@@ -201,6 +224,7 @@ Produces:
 - **OpenCV** — image I/O and preprocessing
 - **TensorBoard** — training visualization (loss, return, SR, SPL curves)
 - **matplotlib** — ablation result plotting (bar charts, radius sweeps)
+- **pytest** — test suite
 
 ---
 
