@@ -77,6 +77,7 @@ habitat_sim/
 # Cache
 .cache/
 .tmp/
+.coverage
 
 # infra
 .history/
