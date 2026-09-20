@@ -419,7 +419,7 @@ Uses matplotlib with Agg backend (no display required). Falls back gracefully if
 
 ### Location: `tests/`
 
-The project uses **pytest** with 58 tests covering all major modules. Tests run in ~1 second without any external dependencies (no Habitat scenes, no C++ extensions required).
+The project uses **pytest** with 91 tests covering all major modules. Tests run in ~1 second without any external dependencies (no Habitat scenes, no C++ extensions required).
 
 ### Test Modules
 

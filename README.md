@@ -226,7 +226,7 @@ Run the full test suite:
 python -m pytest tests/ -v
 ```
 
-58 tests cover all major modules:
+91 tests cover all major modules:
 
 | Test file | Module | Tests |
 |-----------|--------|-------|
@@ -236,7 +236,10 @@ python -m pytest tests/ -v
 | `test_mock_env.py` | MockPointNavEnv | 10 |
 | `test_models.py` | Visual encoder + Policy | 10 |
 | `test_metrics.py` | SPL metric | 6 |
-| `test_plot_results.py` | Ablation result plotting | 5 |
+| `test_plot_results.py` | Ablation result plotting | 8 |
+| `test_synthetic_loader.py` | Data loading + datasets | 15 |
+| `test_env_wrapper.py` | Habitat env wrapper | 3 |
+| `test_train_helpers.py` | Training/eval helpers | 10 |
 
 ---
 

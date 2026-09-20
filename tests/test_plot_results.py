@@ -64,3 +64,39 @@ class TestWriteCSV:
         content = csv_path.read_text()
         assert "baseline" in content
         assert "success_rate" in content
+
+
+class TestPlotBarComparison:
+    def test_creates_chart(self, ablation_dir, tmp_path):
+        from src.eval.plot_results import plot_bar_comparison
+
+        results = {
+            "baseline": {"success_rate": 0.96, "mean_spl": 0.91},
+            "freq_r16": {"success_rate": 1.00, "mean_spl": 0.93},
+        }
+        out = tmp_path / "bar.png"
+        plot_bar_comparison(results, out)
+        assert out.exists()
+        assert out.stat().st_size > 0
+
+
+class TestPlotRadiusSweep:
+    def test_creates_chart(self, tmp_path):
+        from src.eval.plot_results import plot_radius_sweep
+
+        results = {
+            "freq_r8": {"success_rate": 0.0, "mean_spl": 0.0},
+            "freq_r16": {"success_rate": 1.0, "mean_spl": 0.93},
+            "freq_r32": {"success_rate": 0.98, "mean_spl": 0.90},
+        }
+        out = tmp_path / "sweep.png"
+        plot_radius_sweep(results, out)
+        assert out.exists()
+
+    def test_skips_with_one_point(self, tmp_path):
+        from src.eval.plot_results import plot_radius_sweep
+
+        results = {"freq_r16": {"success_rate": 1.0, "mean_spl": 0.93}}
+        out = tmp_path / "sweep.png"
+        plot_radius_sweep(results, out)
+        assert not out.exists()
