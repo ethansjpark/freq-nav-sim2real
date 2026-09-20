@@ -103,7 +103,6 @@ This system studies visual frequency requirements for sim-to-real navigation by:
    - Actor outputs 3 action logits (forward/left/right)
 
 ### Data Transformations
-- **Image Resizing** (`src/utils/transforms.py`): `resize()` function for image preprocessing
 - **FDA Frequency Manipulation**: `fourier_swap()` in `src/data/fda.py`
 - **Online Frequency Perturbation**: `freq_adapt()` in `src/train/frequency_adapt.py`
 

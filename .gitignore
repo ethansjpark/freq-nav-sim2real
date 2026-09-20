@@ -26,8 +26,11 @@ nohup.out
 *.tmp
 *.bak
 
-# Experiments & Results
+# Experiments & Results (keep ablation result JSONs)
 experiments/
+!experiments/habitat_ablation/
+!experiments/habitat_ablation/*/
+!experiments/habitat_ablation/**/*.json
 results/
 runs/
 checkpoints/

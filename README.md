@@ -42,12 +42,12 @@ Understand:
 ```
 src/
   data/               # FDA + synthetic/real loaders
-  habitat_env/        # Habitat + mock env wrappers, sensors
+  habitat_env/        # Habitat + mock env wrappers
   models/             # Visual encoder + PPO policy
   train/              # PPO training, GAE, domain/FDA utilities
   eval/               # Evaluation, ablation plotting
     plot_results.py   # Aggregate + plot ablation results (bar chart, radius sweep, CSV)
-  utils/              # Metrics (SPL) + transforms
+  utils/              # Metrics (SPL)
 
 csrc/                 # C++ extensions (pybind11 / PyTorch C++ API)
   gae.cpp             # Generalized Advantage Estimation
