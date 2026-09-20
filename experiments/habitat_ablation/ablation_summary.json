@@ -1,0 +1,44 @@
+{
+  "num_steps": 200000,
+  "eval_episodes": 50,
+  "seed": 42,
+  "env": "habitat_test_scenes",
+  "conditions": {
+    "baseline": {
+      "success_rate": 0.0,
+      "mean_spl": 0.0,
+      "mean_return": -4.825463393926562,
+      "mean_length": 500.0
+    },
+    "freq_r8": {
+      "success_rate": 0.0,
+      "mean_spl": 0.0,
+      "mean_return": -5.654811940193102,
+      "mean_length": 500.0
+    },
+    "freq_r16": {
+      "success_rate": 0.0,
+      "mean_spl": 0.0,
+      "mean_return": -4.999999999999938,
+      "mean_length": 500.0
+    },
+    "freq_r32": {
+      "success_rate": 0.0,
+      "mean_spl": 0.0,
+      "mean_return": -4.999999999999938,
+      "mean_length": 500.0
+    },
+    "freq_r16_noise05": {
+      "success_rate": 0.0,
+      "mean_spl": 0.0,
+      "mean_return": -4.999999999999938,
+      "mean_length": 500.0
+    },
+    "freq_r16_noise20": {
+      "success_rate": 0.0,
+      "mean_spl": 0.0,
+      "mean_return": -6.623821234703001,
+      "mean_length": 500.0
+    }
+  }
+}
