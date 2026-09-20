@@ -33,7 +33,6 @@ Understand:
 - Which **visual frequencies** RL agents depend on
 - How **low-frequency style** affects sim-to-real transfer
 - Why high-frequency geometry is critical for navigation
-- Whether GAN-style methods introduce harmful distortions
 - How different **frequency cutoffs** change policy robustness
 
 ---
@@ -64,6 +63,7 @@ scripts/
   run_habitat_ablation.py  # Habitat-Sim 3D ablation (real scenes)
   run_nav.sh          # Navigation training launcher
   eval_realworld.sh   # Evaluation launcher
+  colab_setup.sh      # Google Colab environment setup
 
 assets/
   portfolio/          # Visualization assets for showcasing
