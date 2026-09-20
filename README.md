@@ -70,7 +70,7 @@ assets/
     habitat_renders/  # RGB renders from Habitat-Sim test scenes
     habitat_comparison.png  # Mock vs Habitat ablation chart
 
-tests/                # pytest test suite (58 tests)
+tests/                # pytest test suite (91 tests)
 configs/              # YAML configs
 experiments/          # Results, logs, TensorBoard runs
 ```
